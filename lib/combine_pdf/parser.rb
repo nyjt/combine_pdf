@@ -82,6 +82,23 @@ module CombinePDF
       @parsed = _parse_
       # puts @parsed
 
+      # Fix missing 'endobj' keyword for the last object in the file (e.g.
+      # Adobe Acrobat Reader iOS omits it after the trailing XRef stream),
+      # which otherwise leaves a dangling <id> <gen> <value> triple that
+      # never gets merged into a single indirect object. Same auto-fix as
+      # the wkhtmltopdf missing 'endobj' handling below, applied at EOF.
+      if @parsed.length >= 3 && @parsed[-3].is_a?(Integer) && @parsed[-2].is_a?(Integer) &&
+         !(@parsed[-1].is_a?(Hash) && @parsed[-1].key?(:indirect_reference_id))
+        value = @parsed.pop
+        gen = @parsed.pop
+        id = @parsed.pop
+        merged = value.is_a?(Hash) ? value : { indirect_without_dictionary: value }
+        merged[:indirect_generation_number] = gen
+        merged[:indirect_reference_id] = id
+        warn "'endobj' keyword was missing for Object ID: #{id}, trying to auto-fix issue, but might fail."
+        @parsed << merged
+      end
+
       unless (@parsed.select { |i| !i.is_a?(Hash) }).empty?
         # p @parsed.select
         raise ParsingError, 'Unknown PDF parsing error - malformed PDF file?'
