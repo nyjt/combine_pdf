@@ -1,5 +1,6 @@
 # -*- encoding : utf-8 -*-
-########################################################
+## frozen_string_literal: true
+#######################################################
 ## Thoughts from reading the ISO 32000-1:2008
 ## this file is part of the CombinePDF library and the code
 ## is subject to the same license.
@@ -93,9 +94,10 @@ module CombinePDF
       @version = 0
       @viewer_preferences = {}
       @info = {}
-      parser ||= PDFParser.new('')
+      parser ||= PDFParser.new(+'')
       raise TypeError, "initialization error, expecting CombinePDF::PDFParser or nil, but got #{parser.class.name}" unless parser.is_a? PDFParser
       @objects = parser.parse
+
       # remove any existing id's
       remove_old_ids
       # set data from parser
@@ -174,8 +176,12 @@ module CombinePDF
     def to_pdf(options = {})
       # reset version if not specified
       @version = 1.5 if @version.to_f == 0.0
+
       # set info for merged file
-      @info[:ModDate] = @info[:CreationDate] = Time.now.strftime "D:%Y%m%d%H%M%S%:::z'00"
+      unless(@info[:CreationDate].is_a?(String))
+        @info[:CreationDate] = Time.now unless @info[:CreationDate].is_a?(Time)
+        @info[:CreationDate] = @info[:CreationDate].getgm.strftime("D:%Y%m%d%H%M%S%:::z'00")
+      end
       @info[:Subject] = options[:subject] if options[:subject]
       @info[:Producer] = options[:producer] if options[:producer]
       # rebuild_catalog
@@ -201,9 +207,9 @@ module CombinePDF
       xref_location = loc
       # xref_location = 0
       # out.each { |line| xref_location += line.bytesize + 1}
-      out << "xref\n0 #{indirect_object_count}\n0000000000 65535 f \n"
-      xref.each { |offset| out << (out.pop + ("%010d 00000 n \n" % offset)) }
-      out << out.pop + 'trailer'
+      out << "xref\n0 #{indirect_object_count}\n0000000000 65535 f "
+      xref.each { |offset| out << ("%010d 00000 n ".freeze % offset) }
+      out << 'trailer'.freeze
       out << "<<\n/Root #{false || "#{catalog[:indirect_reference_id]} #{catalog[:indirect_generation_number]} R"}"
       out << "/Size #{indirect_object_count}"
       out << "/Info #{@info[:indirect_reference_id]} #{@info[:indirect_generation_number]} R"
@@ -211,7 +217,7 @@ module CombinePDF
       # when finished, remove the numbering system and keep only pointers
       remove_old_ids
       # output the pdf stream
-      out.join("\n".force_encoding(Encoding::ASCII_8BIT)).force_encoding(Encoding::ASCII_8BIT)
+      out.join("\n".b).force_encoding(Encoding::ASCII_8BIT)
     end
 
     # this method returns all the pages cataloged in the catalog.
@@ -261,10 +267,12 @@ module CombinePDF
         next if !r
         r = r[:referenced_object] if r[:referenced_object]
         r = r[:Font]
-        next if !r        
+        next if !r
         r = r[:referenced_object] if r[:referenced_object]
         r.values.each do |f|
+          next if f.class != Hash
           f = f[:referenced_object] if f[:referenced_object]
+          next if f.class != Hash
           if (limit_to_type0 || f[:Subtype] == :Type0) && f[:Type] == :Font && !fonts_array.include?(f)
             fonts_array << f
           end
