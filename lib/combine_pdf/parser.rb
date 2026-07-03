@@ -34,6 +34,7 @@ module CombinePDF
     attr_reader :info_object, :root_object, :names_object, :forms_object, :outlines_object, :metadata
 
     attr_reader :allow_optional_content, :raise_on_encrypted
+    attr_reader :relaxed
     # when creating a parser, it is important to set the data (String) we wish to parse.
     #
     # <b>the data is required and it is not possible to set the data at a later stage</b>
@@ -59,6 +60,7 @@ module CombinePDF
       @scanner = nil
       @allow_optional_content = options[:allow_optional_content]
       @raise_on_encrypted = options[:raise_on_encrypted]
+      @relaxed = options[:relaxed]
     end
 
     # parse the data in the new parser (the data already set through the initialize / new method)
@@ -79,6 +81,23 @@ module CombinePDF
       end
       @parsed = _parse_
       # puts @parsed
+
+      # Fix missing 'endobj' keyword for the last object in the file (e.g.
+      # Adobe Acrobat Reader iOS omits it after the trailing XRef stream),
+      # which otherwise leaves a dangling <id> <gen> <value> triple that
+      # never gets merged into a single indirect object. Same auto-fix as
+      # the wkhtmltopdf missing 'endobj' handling below, applied at EOF.
+      if @parsed.length >= 3 && @parsed[-3].is_a?(Integer) && @parsed[-2].is_a?(Integer) &&
+         !(@parsed[-1].is_a?(Hash) && @parsed[-1].key?(:indirect_reference_id))
+        value = @parsed.pop
+        gen = @parsed.pop
+        id = @parsed.pop
+        merged = value.is_a?(Hash) ? value : { indirect_without_dictionary: value }
+        merged[:indirect_generation_number] = gen
+        merged[:indirect_reference_id] = id
+        warn "'endobj' keyword was missing for Object ID: #{id}, trying to auto-fix issue, but might fail."
+        @parsed << merged
+      end
 
       unless (@parsed.select { |i| !i.is_a?(Hash) }).empty?
         # p @parsed.select
@@ -362,12 +381,25 @@ module CombinePDF
           # advance by the publshed stream length (if any)
           old_pos = @scanner.pos
           if(out.last.is_a?(Hash) && out.last[:Length].is_a?(Integer) && out.last[:Length])
-            @scanner.pos += out.last[:Length]
-            unless(@scanner.skip(/\r?\n?endstream/))
-              @scanner.pos = old_pos 
-              # raise error if the stream doesn't end.
-              unless @scanner.skip_until(/endstream/)
-                raise ParsingError, "Parsing Error: PDF file error - a stream object wasn't properly closed using 'endstream'!"
+            begin
+              @scanner.pos += out.last[:Length]
+              unless(@scanner.skip(/\r?\n?endstream/))
+                @scanner.pos = old_pos
+                # raise error if the stream doesn't end.
+                unless @scanner.skip_until(/endstream/)
+                  raise ParsingError, "Parsing Error: PDF file error - a stream object wasn't properly closed using 'endstream'!"
+                end
+              end
+            rescue RangeError => error
+              # HP Scan (and others) may write an invalid /Length that points
+              # past the end of the file, making `pos +=` raise a RangeError.
+              raise error unless @relaxed
+              @scanner.pos = old_pos
+              skipped = @scanner.skip_until(/endstream/)
+              if skipped
+                warn "CombinePDF parser: invalid length: #{out.last[:Length]} for object: #{out.last} should be: #{skipped - 'endstream'.length}"
+              else
+                raise ParsingError, "Parsing Error: PDF file error - a stream object with invalid length of #{out.last[:Length]} for object #{out.last} and no endstream found, to work around it"
               end
             end
           else

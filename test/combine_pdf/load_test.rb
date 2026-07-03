@@ -45,4 +45,16 @@ describe 'CombinePDF.load' do
       end
     end
   end
+
+  describe 'with a file whose last object is missing the endobj keyword' do
+    # e.g. Adobe Acrobat Reader iOS omits 'endobj' after the trailing
+    # indirect object, leaving a dangling <id> <gen> <value> triple.
+    let(:file) { 'missing_endobj_last_object.pdf' }
+    let(:options) { { relaxed: true } }
+
+    it('parses instead of raising CombinePDF::ParsingError') do
+      assert_instance_of CombinePDF::PDF, subject
+      assert_equal 1, subject.pages.size
+    end
+  end
 end
