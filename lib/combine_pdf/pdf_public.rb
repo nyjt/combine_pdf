@@ -1,5 +1,6 @@
 # -*- encoding : utf-8 -*-
-########################################################
+## frozen_string_literal: true
+#######################################################
 ## Thoughts from reading the ISO 32000-1:2008
 ## this file is part of the CombinePDF library and the code
 ## is subject to the same license.
@@ -93,7 +94,7 @@ module CombinePDF
       @version = 0
       @viewer_preferences = {}
       @info = {}
-      parser ||= PDFParser.new('')
+      parser ||= PDFParser.new(+'')
       raise TypeError, "initialization error, expecting CombinePDF::PDFParser or nil, but got #{parser.class.name}" unless parser.is_a? PDFParser
       @objects = parser.parse
 
@@ -206,9 +207,9 @@ module CombinePDF
       xref_location = loc
       # xref_location = 0
       # out.each { |line| xref_location += line.bytesize + 1}
-      out << "xref\n0 #{indirect_object_count}\n0000000000 65535 f \n"
-      xref.each { |offset| out << (out.pop + ("%010d 00000 n \n" % offset)) }
-      out << out.pop + 'trailer'
+      out << "xref\n0 #{indirect_object_count}\n0000000000 65535 f "
+      xref.each { |offset| out << ("%010d 00000 n ".freeze % offset) }
+      out << 'trailer'.freeze
       out << "<<\n/Root #{false || "#{catalog[:indirect_reference_id]} #{catalog[:indirect_generation_number]} R"}"
       out << "/Size #{indirect_object_count}"
       out << "/Info #{@info[:indirect_reference_id]} #{@info[:indirect_generation_number]} R"
@@ -216,7 +217,7 @@ module CombinePDF
       # when finished, remove the numbering system and keep only pointers
       remove_old_ids
       # output the pdf stream
-      out.join("\n".force_encoding(Encoding::ASCII_8BIT)).force_encoding(Encoding::ASCII_8BIT)
+      out.join("\n".b).force_encoding(Encoding::ASCII_8BIT)
     end
 
     # this method returns all the pages cataloged in the catalog.

@@ -1,5 +1,39 @@
 # Change Log
 
+#### Change log v.1.0.31 (2025-04-08)
+
+**Fix**: RangeError: index out of range errors occurred with some malformed PDFs, when the number of bytes in a PDF `stream` didn't match the number of bytes expected according to the `Length` property. Credit to @Laykou and others for opening multiple issues (i.e., #205), as well as @julitrows, @mtwzim, and @Kaiito630, for pushing on this.
+
+**Fix**: frozen string literal lingering issues. Credit to @pauline-koch, @qdegraeve, @isaporto, @ncreuschling, @francescob, @@anthonykaufman and @ma-matsui for their input on this issue. Credit to @anthonykaufman for offering one possible solution and @Markus-Munk-Shipmondo for pushing on this. Credit to @mfazekas for opening PR #215 and for @RBIII, @juliolinarez, and @osvaldoalvaradodev for supporting it.
+
+**Fix**: possible permission issues. Credit to @davidwessman, @visini, @sander-deryckere, and @LindseySaari for exploring this.
+
+**Fix**: calling CombinePDF.parse with a frozen string literal. Credit to @lovro-bikic for offering one possible solution.
+
+**Fix**: Ruby 3.4 warning. Credit to @chaadow for offering one possible solution.
+
+#### Change log v.1.0.29 (2024-12-07)
+
+**Fix**: frozen string literal support fix. Credit to @francescob (Francesco) for PR #245.
+
+#### Change log v.1.0.28 (2024-11-12)
+
+**Fix**: use `require` to load code (instead of `load`). Credit to @casperisfine (Jean byroot Boussier) for PR #216.
+
+#### Change log v.1.0.27 (2024-11-10)
+
+**Performance**: fix performance issues with `object_id` usage in Ruby 3+. Credit to @amomchilov (Alexander Momchilov) for PR #241.
+
+**Performance**: use frozen string literals. Credit to @casperisfine (Jean byroot Boussier) for PR #239.
+
+#### Change log v.1.0.26 (2023-12-22)
+
+**Performance**: possible performance bump. Credit to @denislavski (Denislav Naydenov) for opening PR #235.
+
+#### Change log v.1.0.25 (2023-12-19)
+
+**Fix**: possible improve memory usage. Credit to @denislavski (Denislav Naydenov) for opening PR #233 and suggesting this change.
+
 #### Change log v.1.0.24 (2023-10-19)
 
 **Fix**: possible `nil` in loop. Credit to @jkowens for PR #231 and adding a quick fix using a simple guard.

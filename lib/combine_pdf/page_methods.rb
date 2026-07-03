@@ -1,4 +1,5 @@
 # -*- encoding : utf-8 -*-
+# frozen_string_literal: true
 ########################################################
 ## Thoughts from reading the ISO 32000-1:2008
 ## this file is part of the CombinePDF library and the code
@@ -214,7 +215,7 @@ module CombinePDF
       options[:text_padding] = 0 if options[:text_padding].to_f >= 1
 
       # create box stream
-      box_stream = ''
+      box_stream = +''
       # set graphic state for box
       if options[:box_color] || (options[:border_width].to_i > 0 && options[:border_color])
         # compute x and y position for text
@@ -290,7 +291,7 @@ module CombinePDF
       # reset x,y by text alignment - x,y are calculated from the bottom left
       # each unit (1) is 1/72 Inch
       # create text stream
-      text_stream = ''
+      text_stream = +''
       if !text.to_s.empty? && options[:font_size] != 0 && (options[:font_color] || options[:stroke_color])
         # compute x and y position for text
         x = options[:x] + (options[:width] * options[:text_padding])
@@ -679,7 +680,7 @@ module CombinePDF
       insert_content 'Q'
 
       # Prep content
-      @contents = ''
+      @contents = +''
       insert_content @contents
       @contents
     end
@@ -788,7 +789,7 @@ module CombinePDF
           # add to array
           if out.last.nil? || out.last[0] != fonts[i]
             out.last[1] << '>' unless out.last.nil?
-            out << [fonts[i], '<', 0, 0]
+            out << [fonts[i], (+'<'), 0, 0]
           end
           out.last[1] << (fonts_array[i].cmap.nil? ? (c.unpack('H*')[0]) : fonts_array[i].cmap[c])
           if fonts_array[i].metrics[c]

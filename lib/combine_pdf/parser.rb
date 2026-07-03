@@ -42,7 +42,7 @@ module CombinePDF
     # string:: the data to be parsed, as a String object.
     def initialize(string, options = {})
       raise TypeError, "couldn't parse data, expecting type String" unless string.is_a? String
-      @string_to_parse = string.force_encoding(Encoding::ASCII_8BIT)
+      @string_to_parse = (string.frozen? ? string.dup : string).force_encoding(Encoding::ASCII_8BIT)
       @literal_strings = [].dup
       @hex_strings = [].dup
       @streams = [].dup
@@ -281,7 +281,7 @@ module CombinePDF
         ##########################################
         elsif @scanner.scan(/\(/)
           # warn "Found a literal string"
-          str = ''.force_encoding(Encoding::ASCII_8BIT)
+          str = ''.b
           count = 1
           while count > 0 && @scanner.rest?
             scn = @scanner.scan_until(/[\(\)]/)
@@ -377,42 +377,43 @@ module CombinePDF
         ##########################################
         ## parse a Stream
         ##########################################
-        elsif @scanner.scan(/stream[ \t]*[\r\n]/)
-          @scanner.pos += 1 if @scanner.peek(1) == "\n".freeze && @scanner.matched[-1] != "\n".freeze
+        elsif @scanner.scan(/stream[ \t]*\r?\n?/)
           # advance by the publshed stream length (if any)
           old_pos = @scanner.pos
-          if(out.last.is_a?(Hash) && out.last[:Length].is_a?(Integer) && out.last[:Length] > 2)
+          if(out.last.is_a?(Hash) && out.last[:Length].is_a?(Integer) && out.last[:Length])
             begin
-              @scanner.pos += out.last[:Length] - 2
+              @scanner.pos += out.last[:Length]
+              unless(@scanner.skip(/\r?\n?endstream/))
+                @scanner.pos = old_pos
+                # raise error if the stream doesn't end.
+                unless @scanner.skip_until(/endstream/)
+                  raise ParsingError, "Parsing Error: PDF file error - a stream object wasn't properly closed using 'endstream'!"
+                end
+              end
             rescue RangeError => error
+              # HP Scan (and others) may write an invalid /Length that points
+              # past the end of the file, making `pos +=` raise a RangeError.
               raise error unless @relaxed
-              oldpos = @scanner.pos
+              @scanner.pos = old_pos
               skipped = @scanner.skip_until(/endstream/)
               if skipped
-                len = skipped - 'endstream'.length
-                warn "CombinePDF parser: invalid length: #{out.last[:Length]} for object: #{out.last} should be: #{len}"
-                @scanner.pos = oldpos
-                @scanner.pos += len
+                warn "CombinePDF parser: invalid length: #{out.last[:Length]} for object: #{out.last} should be: #{skipped - 'endstream'.length}"
               else
                 raise ParsingError, "Parsing Error: PDF file error - a stream object with invalid length of #{out.last[:Length]} for object #{out.last} and no endstream found, to work around it"
               end
             end
+          else
+            # raise error if the stream doesn't end.
+            unless @scanner.skip_until(/endstream/)
+              raise ParsingError, "Parsing Error: PDF file error - a stream object wasn't properly closed using 'endstream'!"
+            end
           end
 
-          # the following was dicarded because some PDF files didn't have an EOL marker as required
-          # str = @scanner.scan_until(/(\r\n|\r|\n)endstream/)
-          # instead, a non-strict RegExp is used:
-          
-
-          # raise error if the stream doesn't end.
-          unless @scanner.skip_until(/endstream/)
-            raise ParsingError, "Parsing Error: PDF file error - a stream object wasn't properly closed using 'endstream'!"
-          end
           length = @scanner.pos - (old_pos + 9)
           length = 0 if(length < 0)
           length -= 1 if(@scanner.string[old_pos + length - 1] == "\n") 
           length -= 1 if(@scanner.string[old_pos + length - 1] == "\r") 
-          str = (length > 0) ? @scanner.string.slice(old_pos, length) : ''
+          str = (length > 0) ? @scanner.string.slice(old_pos, length) : +''
 
           # warn "CombinePDF parser: detected Stream #{str.length} bytes long #{str[0..3]}...#{str[-4..-1]}"
 
@@ -665,17 +666,17 @@ module CombinePDF
     #
     def serialize_objects_and_references
       obj_dir = {}
-      objid_cache = {}
+      objid_cache = {}.compare_by_identity
       # create a dictionary for referenced objects (no value resolution at this point)
       # at the same time, delete duplicates and old versions when objects have multiple versions
       @parsed.uniq!
       @parsed.length.times do |i|
         o = @parsed[i]
-        objid_cache[o.object_id] = i
+        objid_cache[o] = i
         tmp_key = [o[:indirect_reference_id], o[:indirect_generation_number]]
         if tmp_found = obj_dir[tmp_key]
           tmp_found.clear
-          @parsed[objid_cache[tmp_found.object_id]] = nil
+          @parsed[objid_cache[tmp_found]] = nil
         end
         obj_dir[tmp_key] = o
       end
@@ -757,6 +758,7 @@ module CombinePDF
 
     # All Strings are one String
     def unify_string(str)
+      str = str.dup if(str.frozen?)
       str.force_encoding(Encoding::ASCII_8BIT)
       @strings_dictionary[str] ||= str
     end
@@ -798,9 +800,9 @@ module CombinePDF
     # end
 
     # # run block of code on evey PDF object (PDF objects are class Hash)
-    # def each_object(object, limit_references = true, already_visited = {}, &block)
+    # def each_object(object, limit_references = true, already_visited = {}.compare_by_identity, &block)
     # 	unless limit_references
-    # 		already_visited[object.object_id] = true
+    # 		already_visited[object] = true
     # 	end
     # 	case
     # 	when object.is_a?(Array)
@@ -809,7 +811,7 @@ module CombinePDF
     # 		yield(object)
     # 		unless limit_references && object[:is_reference_only]
     # 			object.each do |k,v|
-    # 				each_object(v, limit_references, already_visited, &block) unless already_visited[v.object_id]
+    # 				each_object(v, limit_references, already_visited, &block) unless already_visited[v]
     # 			end
     # 		end
     # 	end
